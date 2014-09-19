@@ -528,13 +528,15 @@ static struct platform_device odroid_fan = {
 #endif
 
 // SPI1
+/*
 static struct s3c64xx_spi_csinfo spi1_csi = {
 		.fb_delay = 0x2,
 		.line = EXYNOS4_GPB(5),
 };
+*/
 
 static struct spi_board_info spi1_board_info[] __initdata = {
-	{
+/*	{
 		.modalias = "spidev",
 		.max_speed_hz = 40 * 1000 * 1000, // 10 mhz
 		.bus_num = 1,
@@ -542,10 +544,11 @@ static struct spi_board_info spi1_board_info[] __initdata = {
 		.mode = SPI_MODE_3,
 		.controller_data = &spi1_csi,
 	},
+*/	
 	{
 		.modalias = "spi_gpio",
 		.max_speed_hz = 2 * 1000 * 1000, // 2 mhz
-		.bus_num = 2,
+		.bus_num = 1,
 		.chip_select = 0,
 		.mode = SPI_MODE_3,
                 .controller_data = (void*)199,
@@ -561,17 +564,19 @@ static struct spi_gpio_platform_data yen_spi_gpio_pdata = {
 
 static struct platform_device yen_spi_gpio = {
         .name           = "spi_gpio",
-        .id             = 2,
+        .id             = -1,
         .dev            = {
                 .platform_data  = &yen_spi_gpio_pdata,
         },
 };
 
 #if defined(CONFIG_ODROID_IOBOARD)
+/*
 static struct platform_device odroid_ioboard_spi = {
 	.name			= "spidev",
 	.id 			= 1,
 };
+*/
 #endif
 
 static struct platform_device *hkdk4412_devices[] __initdata = {
@@ -628,9 +633,9 @@ static struct platform_device *hkdk4412_devices[] __initdata = {
 	&s3c_device_timer[0],
 	&odroid_fan,
 #endif
-	&s3c64xx_device_spi1,
+//	&s3c64xx_device_spi1,
 #if defined(CONFIG_ODROID_IOBOARD)
-	&odroid_ioboard_spi,
+//	&odroid_ioboard_spi,
 #endif
         &yen_spi_gpio,
 #if defined(CONFIG_USB_EXYNOS_SWITCH)
@@ -751,7 +756,7 @@ static void __init hkdk4412_machine_init(void)
 	hkdk4412_usbswitch_init();
 #endif
 
-	s3c64xx_spi1_set_platdata(NULL, 0, 1);
+//	s3c64xx_spi1_set_platdata(NULL, 0, 1);
 	spi_register_board_info(spi1_board_info, ARRAY_SIZE(spi1_board_info));
 
 #if defined(CONFIG_S5P_DEV_TV)
