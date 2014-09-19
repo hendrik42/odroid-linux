@@ -33,6 +33,7 @@
 #include <linux/lcd.h>
 #include <linux/clk.h>
 #include <linux/spi/spi.h>
+#include <linux/spi/spi_gpio.h>
 #include <linux/reboot.h>
 
 #include <asm/mach/arch.h>
@@ -533,7 +534,7 @@ static struct s3c64xx_spi_csinfo spi1_csi = {
 };
 
 static struct spi_board_info spi1_board_info[] __initdata = {
-	[0] = {
+	{
 		.modalias = "spidev",
 		.max_speed_hz = 40 * 1000 * 1000, // 10 mhz
 		.bus_num = 1,
@@ -541,12 +542,35 @@ static struct spi_board_info spi1_board_info[] __initdata = {
 		.mode = SPI_MODE_3,
 		.controller_data = &spi1_csi,
 	},
+	{
+		.modalias = "spi_gpio",
+		.max_speed_hz = 2 * 1000 * 1000, // 2 mhz
+		.bus_num = 2,
+		.chip_select = 0,
+		.mode = SPI_MODE_3,
+                .controller_data = (void*)199,
+	},
+};
+
+static struct spi_gpio_platform_data yen_spi_gpio_pdata = {
+        .sck            = 204,
+        .mosi           = 200,
+        .miso           = SPI_GPIO_NO_MISO,
+        .num_chipselect = 1,
+};
+
+static struct platform_device yen_spi_gpio = {
+        .name           = "spi_gpio",
+        .id             = 2,
+        .dev            = {
+                .platform_data  = &yen_spi_gpio_pdata,
+        },
 };
 
 #if defined(CONFIG_ODROID_IOBOARD)
 static struct platform_device odroid_ioboard_spi = {
 	.name			= "spidev",
-	.id 			= -1,
+	.id 			= 1,
 };
 #endif
 
@@ -608,6 +632,7 @@ static struct platform_device *hkdk4412_devices[] __initdata = {
 #if defined(CONFIG_ODROID_IOBOARD)
 	&odroid_ioboard_spi,
 #endif
+        &yen_spi_gpio,
 #if defined(CONFIG_USB_EXYNOS_SWITCH)
 	&s5p_device_usbswitch,
 #endif
