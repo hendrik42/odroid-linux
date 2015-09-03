@@ -534,37 +534,38 @@ static struct s3c64xx_spi_csinfo spi1_csi = {
 		.line = EXYNOS4_GPB(5),
 };
 */
+//static int spi_bitbang_cs = EXYNOS4_GPX1(0);
 
 static struct spi_board_info spi1_board_info[] __initdata = {
-/*	{
+	{
 		.modalias = "spidev",
-		.max_speed_hz = 40 * 1000 * 1000, // 10 mhz
+		.max_speed_hz = 2 * 1000 * 1000, // 2 mhz
 		.bus_num = 1,
 		.chip_select = 0,
 		.mode = SPI_MODE_3,
-		.controller_data = &spi1_csi,
-	},
-*/	
-	{
+		.controller_data = (void*)EXYNOS4_GPX1(0),
+	}	
+/*	,{
 		.modalias = "spi_gpio",
 		.max_speed_hz = 2 * 1000 * 1000, // 2 mhz
 		.bus_num = 1,
 		.chip_select = 0,
 		.mode = SPI_MODE_3,
-                .controller_data = (void*)199,
+                .controller_data = (void*)EXYNOS4_GPX1(0),
 	},
+*/	
 };
 
 static struct spi_gpio_platform_data yen_spi_gpio_pdata = {
-        .sck            = 204,
-        .mosi           = 200,
-        .miso           = SPI_GPIO_NO_MISO,
+        .sck            = EXYNOS4_GPX1(5),
+        .mosi           = EXYNOS4_GPX1(1),
+        .miso           = EXYNOS4_GPA0(0),
         .num_chipselect = 1,
 };
 
 static struct platform_device yen_spi_gpio = {
         .name           = "spi_gpio",
-        .id             = -1,
+        .id             = 1,
         .dev            = {
                 .platform_data  = &yen_spi_gpio_pdata,
         },
