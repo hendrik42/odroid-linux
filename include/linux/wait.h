@@ -12,17 +12,21 @@ typedef struct __wait_queue wait_queue_t;
 typedef int (*wait_queue_func_t)(wait_queue_t *wait, unsigned mode, int flags, void *key);
 int default_wake_function(wait_queue_t *wait, unsigned mode, int flags, void *key);
 
-struct __wait_queue {
-	unsigned int flags;
+/* __wait_queue::flags */
 #define WQ_FLAG_EXCLUSIVE	0x01
-	void *private;
-	wait_queue_func_t func;
-	struct list_head task_list;
+#define WQ_FLAG_WOKEN		0x02
+
+struct __wait_queue {
+	unsigned int		flags;
+	void			*private;
+	wait_queue_func_t	func;
+	struct list_head	task_list;
 };
 
 struct wait_bit_key {
 	void *flags;
 	int bit_nr;
+	unsigned long timeout;
 };
 
 struct wait_bit_queue {
@@ -136,6 +140,7 @@ static inline void __remove_wait_queue(wait_queue_head_t *head,
 	list_del(&old->task_list);
 }
 
+typedef int wait_bit_action_f(struct wait_bit_key *);
 void __wake_up(wait_queue_head_t *q, unsigned int mode, int nr, void *key);
 void __wake_up_locked_key(wait_queue_head_t *q, unsigned int mode, void *key);
 void __wake_up_sync_key(wait_queue_head_t *q, unsigned int mode, int nr,
@@ -148,6 +153,7 @@ int __wait_on_bit_lock(wait_queue_head_t *, struct wait_bit_queue *, int (*)(voi
 void wake_up_bit(void *, int);
 int out_of_line_wait_on_bit(void *, int, int (*)(void *), unsigned);
 int out_of_line_wait_on_bit_lock(void *, int, int (*)(void *), unsigned);
+int out_of_line_wait_on_bit_timeout(void *, int, wait_bit_action_f *, unsigned, unsigned long);
 wait_queue_head_t *bit_waitqueue(void *, int);
 
 #define wake_up(x)			__wake_up(x, TASK_NORMAL, 1, NULL)
@@ -217,8 +223,6 @@ do {									\
 		if (!ret)						\
 			break;						\
 	}								\
-	if (!ret && (condition))					\
-		ret = 1;						\
 	finish_wait(&wq, &__wait);					\
 } while (0)
 
@@ -235,9 +239,8 @@ do {									\
  * wake_up() has to be called after changing any variable that could
  * change the result of the wait condition.
  *
- * The function returns 0 if the @timeout elapsed, or the remaining
- * jiffies (at least 1) if the @condition evaluated to %true before
- * the @timeout elapsed.
+ * The function returns 0 if the @timeout elapsed, and the remaining
+ * jiffies if the condition evaluated to true before the timeout elapsed.
  */
 #define wait_event_timeout(wq, condition, timeout)			\
 ({									\
@@ -305,8 +308,6 @@ do {									\
 		ret = -ERESTARTSYS;					\
 		break;							\
 	}								\
-	if (!ret && (condition))					\
-		ret = 1;						\
 	finish_wait(&wq, &__wait);					\
 } while (0)
 
@@ -323,10 +324,9 @@ do {									\
  * wake_up() has to be called after changing any variable that could
  * change the result of the wait condition.
  *
- * Returns:
- * 0 if the @timeout elapsed, -%ERESTARTSYS if it was interrupted by
- * a signal, or the remaining jiffies (at least 1) if the @condition
- * evaluated to %true before the @timeout elapsed.
+ * The function returns 0 if the @timeout elapsed, -ERESTARTSYS if it
+ * was interrupted by a signal, and the remaining jiffies otherwise
+ * if the condition evaluated to true before the timeout elapsed.
  */
 #define wait_event_interruptible_timeout(wq, condition, timeout)	\
 ({									\
@@ -719,63 +719,6 @@ do {									\
 	__ret;								\
 })
 
-#define __wait_event_interruptible_lock_irq_timeout(wq, condition,	\
-						    lock, ret)		\
-do {									\
-	DEFINE_WAIT(__wait);						\
-									\
-	for (;;) {							\
-		prepare_to_wait(&wq, &__wait, TASK_INTERRUPTIBLE);	\
-		if (condition)						\
-			break;						\
-		if (signal_pending(current)) {				\
-			ret = -ERESTARTSYS;				\
-			break;						\
-		}							\
-		spin_unlock_irq(&lock);					\
-		ret = schedule_timeout(ret);				\
-		spin_lock_irq(&lock);					\
-		if (!ret)						\
-			break;						\
-	}								\
-	finish_wait(&wq, &__wait);					\
-} while (0)
-
-/**
- * wait_event_interruptible_lock_irq_timeout - sleep until a condition gets true or a timeout elapses.
- *		The condition is checked under the lock. This is expected
- *		to be called with the lock taken.
- * @wq: the waitqueue to wait on
- * @condition: a C expression for the event to wait for
- * @lock: a locked spinlock_t, which will be released before schedule()
- *	  and reacquired afterwards.
- * @timeout: timeout, in jiffies
- *
- * The process is put to sleep (TASK_INTERRUPTIBLE) until the
- * @condition evaluates to true or signal is received. The @condition is
- * checked each time the waitqueue @wq is woken up.
- *
- * wake_up() has to be called after changing any variable that could
- * change the result of the wait condition.
- *
- * This is supposed to be called while holding the lock. The lock is
- * dropped before going to sleep and is reacquired afterwards.
- *
- * The function returns 0 if the @timeout elapsed, -ERESTARTSYS if it
- * was interrupted by a signal, and the remaining jiffies otherwise
- * if the condition evaluated to true before the timeout elapsed.
- */
-#define wait_event_interruptible_lock_irq_timeout(wq, condition, lock,	\
-						  timeout)		\
-({									\
-	int __ret = timeout;						\
-									\
-	if (!(condition))						\
-		__wait_event_interruptible_lock_irq_timeout(		\
-					wq, condition, lock, __ret);	\
-	__ret;								\
-})
-
 
 /*
  * These are the old interfaces to sleep waiting for an event.
@@ -795,8 +738,9 @@ extern long interruptible_sleep_on_timeout(wait_queue_head_t *q,
 void prepare_to_wait(wait_queue_head_t *q, wait_queue_t *wait, int state);
 void prepare_to_wait_exclusive(wait_queue_head_t *q, wait_queue_t *wait, int state);
 void finish_wait(wait_queue_head_t *q, wait_queue_t *wait);
-void abort_exclusive_wait(wait_queue_head_t *q, wait_queue_t *wait,
-			unsigned int mode, void *key);
+void abort_exclusive_wait(wait_queue_head_t *q, wait_queue_t *wait, unsigned int mode, void *key);
+long wait_woken(wait_queue_t *wait, unsigned mode, long timeout);
+int woken_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
 int autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
 int wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
 
@@ -827,6 +771,10 @@ int wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *key);
 		INIT_LIST_HEAD(&(wait)->task_list);			\
 		(wait)->flags = 0;					\
 	} while (0)
+
+
+extern int bit_wait_timeout(struct wait_bit_key *);
+extern int bit_wait_io_timeout(struct wait_bit_key *);
 
 /**
  * wait_on_bit - wait for a bit to be cleared

@@ -57,6 +57,7 @@ static int bnep_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long 
 	struct bnep_conninfo ci;
 	struct socket *nsock;
 	void __user *argp = (void __user *)arg;
+	__u32 supp_feat = BIT(BNEP_SETUP_RESPONSE);
 	int err;
 
 	BT_DBG("cmd %x arg %lx", cmd, arg);
@@ -119,6 +120,12 @@ static int bnep_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long 
 			return -EFAULT;
 
 		return err;
+
+	case BNEPGETSUPPFEAT:
+		if (copy_to_user(argp, &supp_feat, sizeof(supp_feat)))
+			return -EFAULT;
+
+		return 0;
 
 	default:
 		return -EINVAL;
@@ -234,7 +241,7 @@ int __init bnep_sock_init(void)
 		goto error;
 	}
 
-	err = bt_procfs_init(THIS_MODULE, &init_net, "bnep", &bnep_sk_list, NULL);
+	err = bt_procfs_init(&init_net, "bnep", &bnep_sk_list, NULL);
 	if (err < 0) {
 		BT_ERR("Failed to create BNEP proc file");
 		bt_sock_unregister(BTPROTO_BNEP);
@@ -253,8 +260,6 @@ error:
 void __exit bnep_sock_cleanup(void)
 {
 	bt_procfs_cleanup(&init_net, "bnep");
-	if (bt_sock_unregister(BTPROTO_BNEP) < 0)
-		BT_ERR("Can't unregister BNEP socket");
-
+	bt_sock_unregister(BTPROTO_BNEP);
 	proto_unregister(&bnep_proto);
 }
